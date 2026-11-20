@@ -203,11 +203,13 @@ exists. workforce-management supplies people, it does not state the requirement.
 
 ### "Process flow"
 
-A `ProcessFlow` (the topology of a path: which steps, in what order) is
-**decided, not built**. process-path-management would own it (its ADR 0042;
-warehouse-planning ADR 0025). Neither is implemented, and no context uses the
-term in code yet. Today `ProcessPath` in warehouse-planning is a locally declared,
-ordered sequence of process types.
+A `ProcessFlow` (the topology of a path: which stages, in what order) is
+**built on `develop`** (process-path-management ADR 0042, PR #272; warehouse-planning
+ADR 0025 stage 1, PR #156; merged 2026-11-20). process-path-management owns it;
+warehouse-planning keeps an event-fed `process_flows` copy, and an ACTIVE flow wins
+over a locally declared `ProcessPath` of the same id (every path read says which it
+used: `source: flow|local`). The local declaration retires in stages 2-3, decided,
+not built.
 
 ### "Release"
 

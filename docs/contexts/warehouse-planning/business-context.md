@@ -86,10 +86,13 @@ shift's heads were committed separately in `workforce-management`. Now:
   0052) and matches plans by the plan's `site_id`, else by `location` (its
   ADR 0053).
 
-`ProcessFlow` (ADR 0025) is decided and not built: `process-path-management`
-would publish the ordered stages of a flow and this context would read them
-as a path's steps instead of declaring them with `POST /process-paths`. Until
-it is built, a path's steps are still declared here.
+`ProcessFlow` (ADR 0025 stage 1) is built on `develop`: `process-path-management`
+publishes the ordered stages of a flow (`ProcessFlowDefined/Revised/Retired`, each
+the full state with a `version`) and this context keeps a `process_flows` copy,
+applying a message only when its `version` is greater. An ACTIVE flow wins over a
+locally declared path of the same id — every path read says which it used
+(`source: flow|local`). `POST /process-paths` keeps working until stages 2-3
+(decided, not built) retire it.
 
 ## Why capacity is composed, not stored
 

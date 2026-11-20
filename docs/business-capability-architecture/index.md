@@ -208,9 +208,11 @@ workforce-management (ADR 0043), labor-performance (ADR 0038) and order-manageme
 (ADRs 0052, 0053). The requirement side of planning (the workload forecast, the
 labour plan, its drift, the labour requirement, scenarios and supersession) is now
 warehouse-planning's, not wes-work-planning's, and the model says so. The commits in
-the table are the first harvest, not those re-reads. The process flow
-(process-path-management ADR 0042, warehouse-planning ADR 0025) is decided, not built,
-and is not a capability in this map.
+the table are the first harvest, not those re-reads. The process flow is built on `develop` (process-path-management ADR 0042,
+warehouse-planning ADR 0025 stage 1, merged 2026-11-20): warehouse-planning consumes
+`ProcessFlowDefined/Revised/Retired` into a local copy; the capability map itself was
+generated before that, so the flow still rides inside the path capabilities rather
+than as its own row.
 
 ## Pages in this section
 
