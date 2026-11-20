@@ -49,7 +49,7 @@ flowchart TB
         LP["labor-performance"]
     end
     subgraph WCS["WCS - equipment control - ISA-95 level 2"]
-        NOWCS["not built<br/>reserved seam in fulfillment-execution"]
+        NOWCS["designed, not built<br/>reserved seam in fulfillment-execution"]
     end
     ABOVE ==>|"OrderAllocated,<br/>WorkDemandReleased"| WES
     ABOVE ==>|"reservations,<br/>TransferAllocationRequested"| WMSC
@@ -95,7 +95,9 @@ stands for the event families listed on the tier pages.
   `fulfillment-execution` release, balance and dispatch work the way the
   industry describes a WES, an *embedded* WES in Interact Analysis's terms.
   There is no WCS, so release reacts to backlog and capacity, not to equipment
-  state.
+  state. The WCS tier is now [designed, not built](/wcs): three contexts for an
+  AMR fleet and an AS/RS, whose capacity facts would let release react to
+  equipment state.
 - **The fleet's `wes` label is wider than the industry's WES.** Of the eleven
   contexts publishing under `wes`, three are WES software; seven are labor
   management, systems above the WMS, or the agent; `task-interleaving` is not
@@ -114,6 +116,7 @@ stands for the event families listed on the tier pages.
 | [WMS tier](/wms-wes/wms-tier) | One card per `wms` context, with the WMS functions it owns and its inputs and outputs. |
 | [WES tier](/wms-wes/wes-tier) | One card per `wes` context, grouped as WES, labor management, above the WMS, and decision support. |
 | [Tier interactions](/wms-wes/tier-interactions) | Inbound, outbound and transfer flows drawn across the tiers. |
+| [WCS (designed, not built)](/wcs) | The strategic design of the missing WCS tier: subdomains, three bounded contexts, context map, seam decisions and message flows. |
 
 Related: [Subdomain Classification](/strategic-design/subdomain-classification)
 (Core, Supporting, Generic), the [Event Standard](/strategic-design/event-standard-cloudevents)
