@@ -18,7 +18,10 @@ capabilities a station/associate must hold to work it. Since
 [ADR 0010](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0010-fulfillment-capability-contract.md)
 each path also declares a p95 cycle time and eligibility rules, and the
 context owns a second aggregate — a site-scoped **CPT schedule** — so
-`order-management` can derive its delivery promise from path capability.
+`order-management` can derive its delivery promise from path capability, and
+since [ADR 0042](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0042-process-flows.md)
+a third, the **process flow**: an ordered list of `path_id` + `process_type`
+stages owned here and consumed by `warehouse-planning` (its ADR 0025).
 
 The catalogue also carries the work paths of the floor-work chains that are not
 customer orders: `RELOCATE` for approved slot-plan moves (ADR 0033), `DISPATCH`
@@ -69,7 +72,8 @@ picture.
   every downstream relationship with its pattern, technology and status.
 - [Aggregate Design Canvas](/contexts/process-path-management/aggregate-design-canvas)
   ([ddd-crew aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas)):
-  the `ProcessPath` aggregate (plus the smaller `CPTSchedule` aggregate),
+  the `ProcessPath` aggregate (plus the `CPTSchedule` and `ProcessFlow`
+  aggregates),
   with state transitions, invariants, commands and events.
 - [Domain Events](/contexts/process-path-management/domain-events):
   `ProcessPathCreated`, `ProcessPathUpdated`, `ProcessPathDeactivated` and

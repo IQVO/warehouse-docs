@@ -75,7 +75,9 @@ three of its intended consumers (`fulfillment-execution`,
 into a local catalogue cache instead of reading the old static file —
 verified live, with a newly-defined path reaching all three running
 consumers with no restart, and a deactivation propagating the same way.
-A fourth consumer, `order-management`, now reads the same topic too: since
+A fifth reader is `warehouse-planning` (ADR 0042 on this side, its ADR 0025):
+it consumes the three `processflow.*` types into a version-guarded local copy,
+so the floor's topology has one owner. A fourth consumer, `order-management`, now reads the same topic too: since
 [ADR 0010](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0010-fulfillment-capability-contract.md)
 each path declares a p95 cycle time and eligibility rules and this context
 owns a site-scoped CPT schedule (`CPTScheduleChanged`), from which

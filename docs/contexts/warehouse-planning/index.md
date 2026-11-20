@@ -91,26 +91,26 @@ labour demand composed at read time from an operator-declared
 `InboundLabourStandard` (`PUT /inbound-labour-standards/{location}/{path_id}`,
 `GET /inbound-demand`).
 
-**Decided, not built:** `ProcessFlow`
+**Built (stage 1):** `ProcessFlow`
 ([ADR 0025](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0025-process-flows-from-process-path-management.md)).
-`process-path-management` would publish an ordered sequence of process-path
-stages, this context would keep a version-guarded local copy as the path
-capacity's steps, and `POST /process-paths` would retire through a strangler.
-Nothing of it is in the code on `develop`: the process paths are still
-declared here.
+`process-path-management` publishes an ordered sequence of process-path stages
+(`ProcessFlowDefined/Revised/Retired`, full state with a `version`), this context
+keeps a version-guarded `process_flows` copy as the path capacity's steps, and
+`POST /process-paths` retires through a strangler in stages 2-3 (decided, not
+built). Until then both sources coexist and every path read carries
+`source: flow|local`.
 
 **Planned, not implemented:** observed capacity from `wes-work-planning`
 and demand from `network-fulfillment`, as drawn in ADR 0001's context map.
 :::
 
-:::note[Not consumed today]
-`process-path-management` is **not** consumed yet. Its `ProcessPath` carries
-routing and capability metadata (`path_id`, `required_capabilities`,
-`eligibility`), never an ordered list of physical process steps, so this
-context owns its own, operator-declared `ProcessPath` and shares only the
-`path_id` string as a loose human cross-reference (ADR 0001 Addendum). ADR 0025
-replaces that Separate Ways with a customer/supplier edge once `ProcessFlow`
-is built.
+:::note[Consumed since ADR 0025]
+`process-path-management`'s topic `warehouse.process-path-management.events` is
+consumed (always on, `PROCESS_FLOW_CONSUMER_GROUP`): the three `processflow.*`
+types keep the `process_flows` copy; every other type on the topic
+(`ProcessPath*`, `CPTScheduleChanged`) is ignored. The ADR 0001 Addendum's
+Separate Ways is now a customer/supplier edge with an anti-corruption layer —
+still no live call.
 :::
 
 ## This context's pages
@@ -131,7 +131,7 @@ is built.
 - [Context Map](/contexts/warehouse-planning/context-map)
   ([ddd-crew context-mapping](https://github.com/ddd-crew/context-mapping)):
   every relationship with its pattern, technology and status, including the
-  deliberate Separate Ways.
+  customer/supplier edge to process-path-management (ADR 0025).
 - [Aggregate Design Canvas](/contexts/warehouse-planning/aggregate-design-canvas)
   ([ddd-crew aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas)):
   the `CapacityPlan` aggregate (plus the `ProcessCapacity` aggregate).

@@ -1,7 +1,7 @@
 ---
-id: domain-message-flow
 title: Domain Message Flow
 sidebar_label: Domain Message Flow
+sidebar_position: 6
 description: ddd-crew Domain Message Flow Modelling for process-path-management — four business scenarios with every command, event and query numbered.
 ---
 

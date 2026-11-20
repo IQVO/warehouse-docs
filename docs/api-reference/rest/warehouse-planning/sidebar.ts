@@ -39,14 +39,20 @@ const sidebar: SidebarsConfig = {
         {
           type: "doc",
           id: "api-reference/rest/warehouse-planning/list-process-paths",
-          label: "List the registered ProcessPaths",
+          label: "List the ProcessPaths (process flows and locally declared paths)",
           className: "api-method get",
         },
         {
           type: "doc",
           id: "api-reference/rest/warehouse-planning/register-process-path",
-          label: "Register (seed) a ProcessPath read model",
-          className: "api-method post",
+          label: "Retired (ADR-0025 stage 2): the local process-path declaration moved to process-path-management",
+          className: "menu__list-item--deprecated api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/warehouse-planning/get-process-path",
+          label: "Get the ProcessPath an id resolves to",
+          className: "api-method get",
         },
         {
           type: "doc",

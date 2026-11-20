@@ -51,7 +51,7 @@ current facts, never to make decisions on its own.
 | `fulfillment-execution` | The Pick/Pack/SLAM task lifecycle; claims, executes, and completes floor work. |
 | `workforce-management` | Certifies, assigns, and tracks labor against process-path capability requirements; owns the labour **supply** and proposes heads from warehouse-planning's committed labour plan. |
 | `facility-layout` | The physical warehouse structure — site, zone, aisle, coded location — as a Generic subdomain. |
-| `process-path-management` | The operator-configurable catalogue of process paths (PICK/PACK/REBIN/SLAM), extracted once instead of duplicated. It is also meant to own the process-flow topology (`ProcessFlow`, its ADR 0042): decided, not built. |
+| `process-path-management` | The operator-configurable catalogue of process paths (PICK/PACK/REBIN/SLAM), extracted once instead of duplicated. It also owns the process-flow topology (`ProcessFlow`, its ADR 0042): built on `develop` (PR #272; consumed by warehouse-planning per its ADR 0025). |
 | `labor-performance` | Owns the labour standards (and publishes them) and scores actual-vs-standard task performance per associate; otherwise a pure downstream observer. |
 | `warehouse-ops-agent` | An agentic read-side aggregator (daily brief, exception correlation) and the console's BFF; owns no domain aggregate. |
 | `network-fulfillment` | The anti-corruption layer to an external retail fulfillment network: polls network demand, places it with `order-management` as a held order, and owns the acknowledgement deadline. |

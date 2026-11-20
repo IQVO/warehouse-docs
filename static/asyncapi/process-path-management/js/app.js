@@ -4,7 +4,7 @@
   "info": {
     "title": "Process Path Management — Published Events",
     "version": "1.0.0",
-    "description": "Publisher-side event contract for the **Process Path Management**\nbounded context. Unlike `labor-performance`'s own `apis/asyncapi.yaml`\n(which documents what that service SUBSCRIBES TO), this document\ndescribes what this service PUBLISHES: it is the SOURCE of the\nprocess-path published language for the fleet, never a consumer of\nanyone else's events.\n\n## Message format: CloudEvents 1.0 (mandatory, ADR 0016)\n\nEvery message on `warehouse.process-path-management.events` AND\n`warehouse.process-path-management.analytics` is a CloudEvents 1.0\nevent in structured content mode (Kafka protocol binding). The Kafka\nmessage value is the JSON event format and every message carries the\nKafka header `content-type: application/cloudevents+json; charset=UTF-8`.\nW3C trace context travels in the `traceparent` (and, when present,\n`tracestate`) Kafka headers of every message raised inside a traced\noperation (ADR 0027); a message raised outside any trace carries no\ntrace headers. Baggage is never propagated. The CloudEvent body does\nnot carry the trace context.\nThere is no other envelope, no dual-write and no envelope toggle.\n\n```json\n{\n  \"specversion\": \"1.0\",\n  \"id\": \"4f1c2a7e-9d31-4a6b-8f0e-6b2c1d5e7a90\",\n  \"source\": \"/warehouse/process-path-management\",\n  \"type\": \"com.warehouse.wes.process-path-management.processpath.ProcessPathCreated\",\n  \"subject\": \"PICK\",\n  \"time\": \"2026-09-06T00:00:00Z\",\n  \"datacontenttype\": \"application/json\",\n  \"dataschema\": \"urn:warehouse:process-path-management:events:ProcessPathCreated:v1\",\n  \"data\": { \"path_id\": \"PICK\", \"...\": \"...\" }\n}\n```\n\n- `id` is minted once per domain event and persisted with the outbox\n  row, so a redelivery carries the same `id`; `(source, id)` is the\n  consumer idempotency key.\n- `subject` is the aggregate id (`path_id` for ProcessPath* events,\n  `site_id` for CPTScheduleChanged) — the same value as the Kafka key.\n- `type` = `com.warehouse.wes.process-path-management.<entity>.<EventName>`.\n  These exact strings are a cross-service contract (consumed by\n  fulfillment-execution, wes-work-planning, workforce-management and\n  order-management); consumers dispatch on the FULL `type`.\n- `dataschema` = `urn:warehouse:process-path-management:<events|analytics>:<EventName>:v1`\n  distinguishes the integration payload from the analytics payload of\n  the same occurrence (today both carry the identical `data` shape).\n- A breaking payload change ships as a new `.v2` type with a new\n  dataschema version, never by mutating an existing one.\n\n## Single, shared topic for four event types\n\nA single topic (not one per event type) per stream. Consumers dispatch\non the CloudEvents `type`. `ProcessPathCreated`, `ProcessPathUpdated`,\nand `ProcessPathDeactivated` are keyed by `path_id`;\n`CPTScheduleChanged` (ADR 0010) is keyed by `site_id` — a different\naggregate on the same topic, so a consumer replaying the topic sees a\ngiven path's or a given site's events in publish order, never\ninterleaved with another aggregate's out of order.\n\n## ADR 0010: the fulfillment capability contract\n\n`ProcessPathCreated`/`ProcessPathUpdated` gained two additive fields —\n`cycle_time_p95` (the operator-declared p95 end-to-end cycle time) and\n`eligibility` (the rules a unit of work must satisfy to be routed to\nthis path) — and this topic now also carries `CPTScheduleChanged`, a\nnew event type for the site-scoped Critical Pull Time schedule. Every\nconsumer's decoder must tolerate an unknown `type` (ignore it,\nnot fail) and tolerate unknown/absent fields on the payloads it\nalready knows, exactly as it already must for any future addition —\nsee ADR 0010's Consequences section.\n\n## ADR 0034: process-path intake\n\n`ProcessPathCreated`/`ProcessPathUpdated` gained an additive `intake`\narray: the demand sources (`CUSTOMER_ORDER`, `STOCK_TRANSFER`,\n`SLOT_RELOCATION`, `INVENTORY_CONTROL`, and since ADR 0036\n`REPLENISHMENT`) allowed to route work onto the\npath. order-management's path selection considers only paths whose\nintake contains `CUSTOMER_ORDER`; `[]` means the path is reached only by\nan explicit path id (PACK, REBIN, SLAM).\n\n## ADR 0036: REPLENISHMENT demand source and the REPLENISH path\n\nThe closed `intake` vocabulary gained `REPLENISHMENT` (additive: no new\nevent type, no payload field). It is declared on exactly one path,\n`REPLENISH` (`match_prefix` `replenish`, required capability\n`replenish`), the path wes-work-planning releases pick-face top-ups on.\nConsumers that decode `intake` as free strings need no change; a\nconsumer that validates against a fixed enum must accept the new value.\n\n## ADR 0038: the full-case and cross-dock paths\n\nThree paths are declared as catalogue data under the unchanged v1\npayload (additive: no new event type, no payload field, no new enum\nvalue). `FULL_CASE` (`match_prefix` `full-case`, capability `pick`)\nand `CROSS_DOCK` (`match_prefix` `cross-dock`, capability `dispatch`,\n`destination_location_role` `Shipping`) accept `CUSTOMER_ORDER`\nonly for a line carrying their `required_product_attributes`\n(`fullCase`, `crossDock`), so a line without them still selects `PICK`;\n`CROSS_DOCK` also accepts `STOCK_TRANSFER`. `BREAK_CASE`\n(`match_prefix` `break`, capability `break`) has an empty intake and is\nreached only by an explicit path id. This service reads no pack fact:\nthe attributes are derived by the consumer from its own data.\n\n## Consumers\n\n`fulfillment-execution`, `wes-work-planning`, `workforce-management`\n(ProcessPath* catalogue caches), `order-management` and\n`network-fulfillment` (ProcessPath* and CPTScheduleChanged) consume the\nintegration topic; `dock-scheduling` and `outbound-shipping` consume\nonly CPTScheduleChanged from it. The analytics\ntopic is consumed only by this service's own projector\n(`cmd/pathmgmt-projector`). See `docs/docs/ecosystem/context-map.md`.\n",
+    "description": "Publisher-side event contract for the **Process Path Management**\nbounded context. Unlike `labor-performance`'s own `apis/asyncapi.yaml`\n(which documents what that service SUBSCRIBES TO), this document\ndescribes what this service PUBLISHES: it is the SOURCE of the\nprocess-path published language for the fleet, never a consumer of\nanyone else's events.\n\n## Message format: CloudEvents 1.0 (mandatory, ADR 0016)\n\nEvery message on `warehouse.process-path-management.events` AND\n`warehouse.process-path-management.analytics` is a CloudEvents 1.0\nevent in structured content mode (Kafka protocol binding). The Kafka\nmessage value is the JSON event format and every message carries the\nKafka header `content-type: application/cloudevents+json; charset=UTF-8`.\nW3C trace context travels in the `traceparent` (and, when present,\n`tracestate`) Kafka headers of every message raised inside a traced\noperation (ADR 0027); a message raised outside any trace carries no\ntrace headers. Baggage is never propagated. The CloudEvent body does\nnot carry the trace context.\nThere is no other envelope, no dual-write and no envelope toggle.\n\n```json\n{\n  \"specversion\": \"1.0\",\n  \"id\": \"4f1c2a7e-9d31-4a6b-8f0e-6b2c1d5e7a90\",\n  \"source\": \"/warehouse/process-path-management\",\n  \"type\": \"com.warehouse.wes.process-path-management.processpath.ProcessPathCreated\",\n  \"subject\": \"PICK\",\n  \"time\": \"2026-09-06T00:00:00Z\",\n  \"datacontenttype\": \"application/json\",\n  \"dataschema\": \"urn:warehouse:process-path-management:events:ProcessPathCreated:v1\",\n  \"data\": { \"path_id\": \"PICK\", \"...\": \"...\" }\n}\n```\n\n- `id` is minted once per domain event and persisted with the outbox\n  row, so a redelivery carries the same `id`; `(source, id)` is the\n  consumer idempotency key.\n- `subject` is the aggregate id (`path_id` for ProcessPath* events,\n  `site_id` for CPTScheduleChanged, `flow_id` for ProcessFlow* events) —\n  the same value as the Kafka key.\n- `type` = `com.warehouse.wes.process-path-management.<entity>.<EventName>`.\n  These exact strings are a cross-service contract (consumed by\n  fulfillment-execution, wes-work-planning, workforce-management and\n  order-management); consumers dispatch on the FULL `type`.\n- `dataschema` = `urn:warehouse:process-path-management:<events|analytics>:<EventName>:v1`\n  distinguishes the integration payload from the analytics payload of\n  the same occurrence (today both carry the identical `data` shape).\n- A breaking payload change ships as a new `.v2` type with a new\n  dataschema version, never by mutating an existing one.\n\n## Single, shared topic for seven event types\n\nA single topic (not one per event type) per stream. Consumers dispatch\non the CloudEvents `type`. `ProcessPathCreated`, `ProcessPathUpdated`,\nand `ProcessPathDeactivated` are keyed by `path_id`;\n`CPTScheduleChanged` (ADR 0010) is keyed by `site_id` — a different\naggregate on the same topic, so a consumer replaying the topic sees a\ngiven path's or a given site's events in publish order, never\ninterleaved with another aggregate's out of order.\n\n## ADR 0042: process flows\n\n`ProcessFlowDefined`, `ProcessFlowRevised` and `ProcessFlowRetired`\n(entity `processflow`, keyed by `flow_id`) carry the FULL state of one\nflow: `flow_id`, `name`, `stages` (`[{path_id, process_type}]`, in\norder), `status` (`ACTIVE` | `RETIRED`) and `version`. The version\nstarts at 1 and grows by one per accepted change (a revision that\nchanges something, or the retirement); a change that changes nothing\nraises no event and keeps it. A consumer applies a message only when\nits `version` is greater than the one it holds, so a redelivery, and\nthe `ProcessFlowRevised` the startup republish re-enqueues for every\nACTIVE flow (at its current version), are no-ops for a consumer that is\ncaught up. The three types are additive on a topic whose consumers\nalready ignore a type they do not handle.\n\n## ADR 0010: the fulfillment capability contract\n\n`ProcessPathCreated`/`ProcessPathUpdated` gained two additive fields —\n`cycle_time_p95` (the operator-declared p95 end-to-end cycle time) and\n`eligibility` (the rules a unit of work must satisfy to be routed to\nthis path) — and this topic now also carries `CPTScheduleChanged`, a\nnew event type for the site-scoped Critical Pull Time schedule. Every\nconsumer's decoder must tolerate an unknown `type` (ignore it,\nnot fail) and tolerate unknown/absent fields on the payloads it\nalready knows, exactly as it already must for any future addition —\nsee ADR 0010's Consequences section.\n\n## ADR 0034: process-path intake\n\n`ProcessPathCreated`/`ProcessPathUpdated` gained an additive `intake`\narray: the demand sources (`CUSTOMER_ORDER`, `STOCK_TRANSFER`,\n`SLOT_RELOCATION`, `INVENTORY_CONTROL`, and since ADR 0036\n`REPLENISHMENT`) allowed to route work onto the\npath. order-management's path selection considers only paths whose\nintake contains `CUSTOMER_ORDER`; `[]` means the path is reached only by\nan explicit path id (PACK, REBIN, SLAM).\n\n## ADR 0036: REPLENISHMENT demand source and the REPLENISH path\n\nThe closed `intake` vocabulary gained `REPLENISHMENT` (additive: no new\nevent type, no payload field). It is declared on exactly one path,\n`REPLENISH` (`match_prefix` `replenish`, required capability\n`replenish`), the path wes-work-planning releases pick-face top-ups on.\nConsumers that decode `intake` as free strings need no change; a\nconsumer that validates against a fixed enum must accept the new value.\n\n## ADR 0038: the full-case and cross-dock paths\n\nThree paths are declared as catalogue data under the unchanged v1\npayload (additive: no new event type, no payload field, no new enum\nvalue). `FULL_CASE` (`match_prefix` `full-case`, capability `pick`)\nand `CROSS_DOCK` (`match_prefix` `cross-dock`, capability `dispatch`,\n`destination_location_role` `Shipping`) accept `CUSTOMER_ORDER`\nonly for a line carrying their `required_product_attributes`\n(`fullCase`, `crossDock`), so a line without them still selects `PICK`;\n`CROSS_DOCK` also accepts `STOCK_TRANSFER`. `BREAK_CASE`\n(`match_prefix` `break`, capability `break`) has an empty intake and is\nreached only by an explicit path id. This service reads no pack fact:\nthe attributes are derived by the consumer from its own data.\n\n## Consumers\n\n`fulfillment-execution`, `wes-work-planning`, `workforce-management`\n(ProcessPath* catalogue caches), `order-management` and\n`network-fulfillment` (ProcessPath* and CPTScheduleChanged) consume the\nintegration topic; `dock-scheduling` and `outbound-shipping` consume\nonly CPTScheduleChanged from it. The analytics\ntopic is consumed only by this service's own projector\n(`cmd/pathmgmt-projector`). See `docs/docs/ecosystem/context-map.md`.\n",
     "contact": {
       "name": "Process Path Management Team",
       "url": "https://github.com/claudioed/process-path-management",
@@ -26,6 +26,10 @@
     {
       "name": "cpt-schedule",
       "description": "Events describing the site-scoped CPTSchedule aggregate (ADR 0010)."
+    },
+    {
+      "name": "process-flow",
+      "description": "Events describing the ProcessFlow aggregate, the ordered stages of process paths (ADR 0042)."
     }
   ],
   "servers": {
@@ -38,17 +42,20 @@
   "defaultContentType": "application/cloudevents+json",
   "channels": {
     "warehouse.process-path-management.events": {
-      "description": "This service's own integration topic (its `kafka.Topic` constant). Carries all three ProcessPath* event types plus CPTScheduleChanged (ADR 0010) as CloudEvents 1.0 (ADR 0016), dispatched by consumers on the full `type`. Kafka message key = the CloudEvents `subject` (`path_id`, or `site_id` for CPTScheduleChanged), hash-balanced. Every message carries the Kafka header `content-type: application/cloudevents+json; charset=UTF-8` plus `traceparent` / `tracestate` when raised inside a traced operation. Events travel through the transactional outbox (Postgres is mandatory, ADR 0037); there is no log or in-memory publisher in the shipped binary. The topic is auto-created by the broker on first write.",
+      "description": "This service's own integration topic (its `kafka.Topic` constant). Carries all three ProcessPath* event types, CPTScheduleChanged (ADR 0010) and the three ProcessFlow* event types (ADR 0042) as CloudEvents 1.0 (ADR 0016), dispatched by consumers on the full `type`. Kafka message key = the CloudEvents `subject` (`path_id`, `site_id` for CPTScheduleChanged, `flow_id` for ProcessFlow*), hash-balanced. Every message carries the Kafka header `content-type: application/cloudevents+json; charset=UTF-8` plus `traceparent` / `tracestate` when raised inside a traced operation. Events travel through the transactional outbox (Postgres is mandatory, ADR 0037); there is no log or in-memory publisher in the shipped binary. The topic is auto-created by the broker on first write.",
       "publish": {
         "operationId": "publishProcessPathEvents",
-        "summary": "Publish ProcessPathCreated / ProcessPathUpdated / ProcessPathDeactivated / CPTScheduleChanged.",
-        "description": "One message per domain event raised by the DefinePath, RevisePath, DeactivatePath, and DefineCPTSchedule use cases. A no-op revision (RevisePath or DefineCPTSchedule with no actual change) and a no-op deactivation (already-deactivated path) raise nothing — consumers never have to diff two identical payloads to notice nothing changed.\nAdditionally, once at every service start (ADR 0038), after the migrations and before the listener binds, the service re-enqueues its whole CURRENT catalogue through the same transactional outbox: one `ProcessPathUpdated` (the path's full current state) per ACTIVE path, in ascending `path_id` order, then one `CPTScheduleChanged` per site, in ascending `site_id` order. Deactivated paths are not republished. This keeps the topic carrying the current state of every live path and schedule even after the broker's retention expired their original events, so a consumer that rebuilds its catalogue by replaying the topic from the earliest offset never depends on retention. The events are ordinary ones: same types, same `data`, same `dataschema`, no new attribute; applying one for an already-known path or site is an idempotent upsert. The republish is NOT written to the analytics topic. It is bounded to 1000 paths and 1000 schedules per start; beyond that the rest are not republished and an ERROR is logged.",
+        "summary": "Publish ProcessPathCreated / ProcessPathUpdated / ProcessPathDeactivated / CPTScheduleChanged / ProcessFlowDefined / ProcessFlowRevised / ProcessFlowRetired.",
+        "description": "One message per domain event raised by the DefinePath, RevisePath, DeactivatePath, DefineCPTSchedule, DefineProcessFlow and RetireProcessFlow use cases. A no-op revision (RevisePath, DefineCPTSchedule or DefineProcessFlow with no actual change), a no-op deactivation (already-deactivated path) and a no-op retirement (already-retired flow) raise nothing — consumers never have to diff two identical payloads to notice nothing changed.\nAdditionally, once at every service start (ADR 0038), after the migrations and before the listener binds, the service re-enqueues its whole CURRENT catalogue through the same transactional outbox: one `ProcessPathUpdated` (the path's full current state) per ACTIVE path, in ascending `path_id` order, then one `CPTScheduleChanged` per site, in ascending `site_id` order, then one `ProcessFlowRevised` (the flow's full current state at its current `version`, ADR 0042) per ACTIVE flow, in ascending `flow_id` order. Deactivated paths and retired flows are not republished. This keeps the topic carrying the current state of every live path and schedule even after the broker's retention expired their original events, so a consumer that rebuilds its catalogue by replaying the topic from the earliest offset never depends on retention. The events are ordinary ones: same types, same `data`, same `dataschema`, no new attribute; applying one for an already-known path or site is an idempotent upsert. The republish is NOT written to the analytics topic. It is bounded to 1000 paths, 1000 schedules and 1000 flows per start; beyond that the rest are not republished and an ERROR is logged.",
         "tags": [
           {
             "name": "process-path"
           },
           {
             "name": "cpt-schedule"
+          },
+          {
+            "name": "process-flow"
           }
         ],
         "message": {
@@ -741,6 +748,290 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "ProcessFlowDefined",
+              "title": "ProcessFlowDefined",
+              "summary": "A process flow was defined.",
+              "description": "Raised by DefineProcessFlow the first time a flow_id is defined (PUT /process-flows/{flowId}). Carries the FULL state of the flow at version 1. Keyed by `flow_id`, so one flow's events stay in order on one partition.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "process-flow"
+                }
+              ],
+              "payload": {
+                "title": "CloudEvent + ProcessFlowDefined data (events stream)",
+                "allOf": [
+                  "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.process-path-management.processflow.ProcessFlowDefined",
+                        "x-parser-schema-id": "<anonymous-schema-49>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:process-path-management:events:ProcessFlowDefined:v1",
+                        "x-parser-schema-id": "<anonymous-schema-50>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "flow_id",
+                          "name",
+                          "stages",
+                          "status",
+                          "version"
+                        ],
+                        "description": "The FULL state of one flow at one version (ADR 0042), the payload of all three ProcessFlow* types. A consumer applies a message only when `version` is greater than the one it holds.",
+                        "properties": {
+                          "flow_id": {
+                            "type": "string",
+                            "example": "single-unit",
+                            "description": "The flow's identity; also the CloudEvents `subject` and the Kafka key.",
+                            "x-parser-schema-id": "<anonymous-schema-51>"
+                          },
+                          "name": {
+                            "type": "string",
+                            "example": "Single unit",
+                            "x-parser-schema-id": "<anonymous-schema-52>"
+                          },
+                          "stages": {
+                            "type": "array",
+                            "minItems": 1,
+                            "description": "The ordered stages; the array order IS the flow's order. A path_id appears at most once.",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "path_id",
+                                "process_type"
+                              ],
+                              "properties": {
+                                "path_id": {
+                                  "type": "string",
+                                  "example": "PICK",
+                                  "description": "An ACTIVE ProcessPath of this service's own catalogue when the stage was accepted.",
+                                  "x-parser-schema-id": "<anonymous-schema-54>"
+                                },
+                                "process_type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "PICK",
+                                    "REBIN",
+                                    "PACK",
+                                    "SLAM",
+                                    "DISPATCH",
+                                    "ARRIVAL",
+                                    "RELOCATE",
+                                    "REPLENISH"
+                                  ],
+                                  "example": "PICK",
+                                  "description": "A closed set (the task types fulfillment-execution publishes).",
+                                  "x-parser-schema-id": "<anonymous-schema-55>"
+                                }
+                              },
+                              "x-parser-schema-id": "FlowStageData"
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-53>"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "ACTIVE",
+                              "RETIRED"
+                            ],
+                            "description": "ACTIVE on Defined and Revised; RETIRED on Retired.",
+                            "x-parser-schema-id": "<anonymous-schema-56>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "example": 2,
+                            "description": "Starts at 1, grows by one per accepted change (a revision that changes something, or the retirement).",
+                            "x-parser-schema-id": "<anonymous-schema-57>"
+                          }
+                        },
+                        "x-parser-schema-id": "ProcessFlowData"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-48>"
+                  }
+                ],
+                "x-parser-schema-id": "ProcessFlowDefinedCloudEvent"
+              },
+              "examples": [
+                {
+                  "name": "singleUnitDefined",
+                  "summary": "The flow single-unit at version 1.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "7a1e5c32-6b04-4d58-9e3f-2c8d1f0a4b66",
+                    "source": "/warehouse/process-path-management",
+                    "type": "com.warehouse.wes.process-path-management.processflow.ProcessFlowDefined",
+                    "subject": "single-unit",
+                    "time": "2026-11-20T08:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:process-path-management:events:ProcessFlowDefined:v1",
+                    "data": {
+                      "flow_id": "single-unit",
+                      "name": "Single unit",
+                      "stages": [
+                        {
+                          "path_id": "PICK",
+                          "process_type": "PICK"
+                        },
+                        {
+                          "path_id": "PACK",
+                          "process_type": "PACK"
+                        }
+                      ],
+                      "status": "ACTIVE",
+                      "version": 1
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProcessFlowRevised",
+              "title": "ProcessFlowRevised",
+              "summary": "A process flow was revised (or republished at start).",
+              "description": "Raised by DefineProcessFlow when a revision of an ACTIVE flow changes its name or stages, with the full new state and the next version. Also enqueued once per ACTIVE flow at every service start (ADR 0038) with the CURRENT state at the CURRENT version: a consumer that is caught up (it applies a message only when its version is greater than the one it holds) ignores it, a fresh one learns the flow. Keyed by `flow_id`, so one flow's events stay in order on one partition.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "process-flow"
+                }
+              ],
+              "payload": {
+                "title": "CloudEvent + ProcessFlowRevised data (events stream)",
+                "allOf": [
+                  "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.process-path-management.processflow.ProcessFlowRevised",
+                        "x-parser-schema-id": "<anonymous-schema-59>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:process-path-management:events:ProcessFlowRevised:v1",
+                        "x-parser-schema-id": "<anonymous-schema-60>"
+                      },
+                      "data": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[4].payload.allOf[1].properties.data"
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-58>"
+                  }
+                ],
+                "x-parser-schema-id": "ProcessFlowRevisedCloudEvent"
+              },
+              "examples": [
+                {
+                  "name": "singleUnitRevised",
+                  "summary": "The flow single-unit at version 2.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "7a1e5c32-6b04-4d58-9e3f-2c8d1f0a4b66",
+                    "source": "/warehouse/process-path-management",
+                    "type": "com.warehouse.wes.process-path-management.processflow.ProcessFlowRevised",
+                    "subject": "single-unit",
+                    "time": "2026-11-20T08:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:process-path-management:events:ProcessFlowRevised:v1",
+                    "data": {
+                      "flow_id": "single-unit",
+                      "name": "Single unit",
+                      "stages": [
+                        {
+                          "path_id": "PICK",
+                          "process_type": "PICK"
+                        },
+                        {
+                          "path_id": "REBIN",
+                          "process_type": "REBIN"
+                        },
+                        {
+                          "path_id": "PACK",
+                          "process_type": "PACK"
+                        }
+                      ],
+                      "status": "ACTIVE",
+                      "version": 2
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProcessFlowRetired",
+              "title": "ProcessFlowRetired",
+              "summary": "A process flow was retired.",
+              "description": "Raised by RetireProcessFlow the first time a flow is retired: the full state with status RETIRED and the next version. A retired flow cannot be revised. Keyed by `flow_id`, so one flow's events stay in order on one partition.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "process-flow"
+                }
+              ],
+              "payload": {
+                "title": "CloudEvent + ProcessFlowRetired data (events stream)",
+                "allOf": [
+                  "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.process-path-management.processflow.ProcessFlowRetired",
+                        "x-parser-schema-id": "<anonymous-schema-62>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:process-path-management:events:ProcessFlowRetired:v1",
+                        "x-parser-schema-id": "<anonymous-schema-63>"
+                      },
+                      "data": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[4].payload.allOf[1].properties.data"
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-61>"
+                  }
+                ],
+                "x-parser-schema-id": "ProcessFlowRetiredCloudEvent"
+              },
+              "examples": [
+                {
+                  "name": "singleUnitRetired",
+                  "summary": "The flow single-unit at version 3.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "7a1e5c32-6b04-4d58-9e3f-2c8d1f0a4b66",
+                    "source": "/warehouse/process-path-management",
+                    "type": "com.warehouse.wes.process-path-management.processflow.ProcessFlowRetired",
+                    "subject": "single-unit",
+                    "time": "2026-11-20T08:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:process-path-management:events:ProcessFlowRetired:v1",
+                    "data": {
+                      "flow_id": "single-unit",
+                      "name": "Single unit",
+                      "stages": [
+                        {
+                          "path_id": "PICK",
+                          "process_type": "PICK"
+                        },
+                        {
+                          "path_id": "REBIN",
+                          "process_type": "REBIN"
+                        },
+                        {
+                          "path_id": "PACK",
+                          "process_type": "PACK"
+                        }
+                      ],
+                      "status": "RETIRED",
+                      "version": 3
+                    }
+                  }
+                }
+              ]
             }
           ]
         }
@@ -751,13 +1042,16 @@
       "publish": {
         "operationId": "publishProcessPathAnalyticsEvents",
         "summary": "Publish the analytics occurrence of every domain event.",
-        "description": "Written in the same outbox transaction as the integration row, sharing its CloudEvents `id`. The startup catalogue republish (ADR 0038) is the one exception: it is not a catalogue change, so it is not written here and never inflates the revised-paths report. Kafka key and headers are the same as on the integration topic.",
+        "description": "Written in the same outbox transaction as the integration row, sharing its CloudEvents `id`. The startup catalogue republish (ADR 0038) is the one exception: it is not a catalogue change, so it is not written here and never inflates the revised-paths report (and, likewise, never a ProcessFlowRevised). Kafka key and headers are the same as on the integration topic.",
         "tags": [
           {
             "name": "process-path"
           },
           {
             "name": "cpt-schedule"
+          },
+          {
+            "name": "process-flow"
           }
         ],
         "message": {
@@ -781,15 +1075,15 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathCreated",
-                        "x-parser-schema-id": "<anonymous-schema-49>"
+                        "x-parser-schema-id": "<anonymous-schema-65>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:process-path-management:analytics:ProcessPathCreated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-50>"
+                        "x-parser-schema-id": "<anonymous-schema-66>"
                       },
                       "data": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-48>"
+                    "x-parser-schema-id": "<anonymous-schema-64>"
                   }
                 ],
                 "x-parser-schema-id": "ProcessPathCreatedAnalyticsCloudEvent"
@@ -843,15 +1137,15 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated",
-                        "x-parser-schema-id": "<anonymous-schema-52>"
+                        "x-parser-schema-id": "<anonymous-schema-68>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:process-path-management:analytics:ProcessPathUpdated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-53>"
+                        "x-parser-schema-id": "<anonymous-schema-69>"
                       },
                       "data": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-51>"
+                    "x-parser-schema-id": "<anonymous-schema-67>"
                   }
                 ],
                 "x-parser-schema-id": "ProcessPathUpdatedAnalyticsCloudEvent"
@@ -906,15 +1200,15 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated",
-                        "x-parser-schema-id": "<anonymous-schema-55>"
+                        "x-parser-schema-id": "<anonymous-schema-71>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:process-path-management:analytics:ProcessPathDeactivated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-56>"
+                        "x-parser-schema-id": "<anonymous-schema-72>"
                       },
                       "data": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[2].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-54>"
+                    "x-parser-schema-id": "<anonymous-schema-70>"
                   }
                 ],
                 "x-parser-schema-id": "ProcessPathDeactivatedAnalyticsCloudEvent"
@@ -958,15 +1252,15 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged",
-                        "x-parser-schema-id": "<anonymous-schema-58>"
+                        "x-parser-schema-id": "<anonymous-schema-74>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:process-path-management:analytics:CPTScheduleChanged:v1",
-                        "x-parser-schema-id": "<anonymous-schema-59>"
+                        "x-parser-schema-id": "<anonymous-schema-75>"
                       },
                       "data": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[3].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-57>"
+                    "x-parser-schema-id": "<anonymous-schema-73>"
                   }
                 ],
                 "x-parser-schema-id": "CPTScheduleChangedAnalyticsCloudEvent"
@@ -1004,6 +1298,212 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "ProcessFlowDefined",
+              "title": "ProcessFlowDefined (analytics stream)",
+              "summary": "Analytics occurrence of ProcessFlowDefined (acknowledged, not projected, by this service's projector).",
+              "description": "Raised by DefineProcessFlow the first time a flow_id is defined (PUT /process-flows/{flowId}). Carries the FULL state of the flow at version 1. Same type, subject, time and data as the integration occurrence; only dataschema differs.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "process-flow"
+                }
+              ],
+              "payload": {
+                "title": "CloudEvent + ProcessFlowDefined data (analytics stream)",
+                "allOf": [
+                  "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.process-path-management.processflow.ProcessFlowDefined",
+                        "x-parser-schema-id": "<anonymous-schema-77>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:process-path-management:analytics:ProcessFlowDefined:v1",
+                        "x-parser-schema-id": "<anonymous-schema-78>"
+                      },
+                      "data": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[4].payload.allOf[1].properties.data"
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-76>"
+                  }
+                ],
+                "x-parser-schema-id": "ProcessFlowDefinedAnalyticsCloudEvent"
+              },
+              "examples": [
+                {
+                  "name": "singleUnitDefinedAnalytics",
+                  "summary": "The flow single-unit at version 1.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "7a1e5c32-6b04-4d58-9e3f-2c8d1f0a4b66",
+                    "source": "/warehouse/process-path-management",
+                    "type": "com.warehouse.wes.process-path-management.processflow.ProcessFlowDefined",
+                    "subject": "single-unit",
+                    "time": "2026-11-20T08:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:process-path-management:analytics:ProcessFlowDefined:v1",
+                    "data": {
+                      "flow_id": "single-unit",
+                      "name": "Single unit",
+                      "stages": [
+                        {
+                          "path_id": "PICK",
+                          "process_type": "PICK"
+                        },
+                        {
+                          "path_id": "PACK",
+                          "process_type": "PACK"
+                        }
+                      ],
+                      "status": "ACTIVE",
+                      "version": 1
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProcessFlowRevised",
+              "title": "ProcessFlowRevised (analytics stream)",
+              "summary": "Analytics occurrence of ProcessFlowRevised (acknowledged, not projected, by this service's projector).",
+              "description": "Raised by DefineProcessFlow when a revision of an ACTIVE flow changes its name or stages, with the full new state and the next version. The startup republish (ADR 0038) is not written to this topic. Same type, subject, time and data as the integration occurrence; only dataschema differs.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "process-flow"
+                }
+              ],
+              "payload": {
+                "title": "CloudEvent + ProcessFlowRevised data (analytics stream)",
+                "allOf": [
+                  "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.process-path-management.processflow.ProcessFlowRevised",
+                        "x-parser-schema-id": "<anonymous-schema-80>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:process-path-management:analytics:ProcessFlowRevised:v1",
+                        "x-parser-schema-id": "<anonymous-schema-81>"
+                      },
+                      "data": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[4].payload.allOf[1].properties.data"
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-79>"
+                  }
+                ],
+                "x-parser-schema-id": "ProcessFlowRevisedAnalyticsCloudEvent"
+              },
+              "examples": [
+                {
+                  "name": "singleUnitRevisedAnalytics",
+                  "summary": "The flow single-unit at version 2.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "7a1e5c32-6b04-4d58-9e3f-2c8d1f0a4b66",
+                    "source": "/warehouse/process-path-management",
+                    "type": "com.warehouse.wes.process-path-management.processflow.ProcessFlowRevised",
+                    "subject": "single-unit",
+                    "time": "2026-11-20T08:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:process-path-management:analytics:ProcessFlowRevised:v1",
+                    "data": {
+                      "flow_id": "single-unit",
+                      "name": "Single unit",
+                      "stages": [
+                        {
+                          "path_id": "PICK",
+                          "process_type": "PICK"
+                        },
+                        {
+                          "path_id": "REBIN",
+                          "process_type": "REBIN"
+                        },
+                        {
+                          "path_id": "PACK",
+                          "process_type": "PACK"
+                        }
+                      ],
+                      "status": "ACTIVE",
+                      "version": 2
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProcessFlowRetired",
+              "title": "ProcessFlowRetired (analytics stream)",
+              "summary": "Analytics occurrence of ProcessFlowRetired (acknowledged, not projected, by this service's projector).",
+              "description": "Raised by RetireProcessFlow the first time a flow is retired: the full state with status RETIRED and the next version. A retired flow cannot be revised. Same type, subject, time and data as the integration occurrence; only dataschema differs.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "process-flow"
+                }
+              ],
+              "payload": {
+                "title": "CloudEvent + ProcessFlowRetired data (analytics stream)",
+                "allOf": [
+                  "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.process-path-management.processflow.ProcessFlowRetired",
+                        "x-parser-schema-id": "<anonymous-schema-83>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:process-path-management:analytics:ProcessFlowRetired:v1",
+                        "x-parser-schema-id": "<anonymous-schema-84>"
+                      },
+                      "data": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[4].payload.allOf[1].properties.data"
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-82>"
+                  }
+                ],
+                "x-parser-schema-id": "ProcessFlowRetiredAnalyticsCloudEvent"
+              },
+              "examples": [
+                {
+                  "name": "singleUnitRetiredAnalytics",
+                  "summary": "The flow single-unit at version 3.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "7a1e5c32-6b04-4d58-9e3f-2c8d1f0a4b66",
+                    "source": "/warehouse/process-path-management",
+                    "type": "com.warehouse.wes.process-path-management.processflow.ProcessFlowRetired",
+                    "subject": "single-unit",
+                    "time": "2026-11-20T08:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:process-path-management:analytics:ProcessFlowRetired:v1",
+                    "data": {
+                      "flow_id": "single-unit",
+                      "name": "Single unit",
+                      "stages": [
+                        {
+                          "path_id": "PICK",
+                          "process_type": "PICK"
+                        },
+                        {
+                          "path_id": "REBIN",
+                          "process_type": "REBIN"
+                        },
+                        {
+                          "path_id": "PACK",
+                          "process_type": "PACK"
+                        }
+                      ],
+                      "status": "RETIRED",
+                      "version": 3
+                    }
+                  }
+                }
+              ]
             }
           ]
         }
@@ -1011,7 +1511,7 @@
       "subscribe": {
         "operationId": "receiveProcessPathAnalyticsEvents",
         "summary": "Receive the analytics occurrence of the catalogue events (own projector).",
-        "description": "Read by `cmd/pathmgmt-projector` only, in consumer group `process-path-management-analytics`. It decodes and validates every message as a CloudEvents 1.0 event, dispatches on the FULL `type`, and projects only `ProcessPathCreated`, `ProcessPathUpdated` and `ProcessPathDeactivated` (counting them per UTC day by the event `time`, deduplicated on the CloudEvents `id`). Any other valid type, `CPTScheduleChanged` included, is ignored. A message that fails CloudEvents validation, or whose handler keeps failing after its retries, is copied unmodified to the dead-letter topic `warehouse.process-path-management.analytics.dlq` and the offset is committed; the consumer never crashes on it and never parses a legacy shape.",
+        "description": "Read by `cmd/pathmgmt-projector` only, in consumer group `process-path-management-analytics`. It decodes and validates every message as a CloudEvents 1.0 event, dispatches on the FULL `type`, and projects only `ProcessPathCreated`, `ProcessPathUpdated` and `ProcessPathDeactivated` (counting them per UTC day by the event `time`, deduplicated on the CloudEvents `id`). Any other valid type, `CPTScheduleChanged` and the three `ProcessFlow*` types (ADR 0042) included, is acknowledged and not projected: it is committed as a no-op, never retried and never dead-lettered. A message that fails CloudEvents validation, or whose handler keeps failing after its retries, is copied unmodified to the dead-letter topic `warehouse.process-path-management.analytics.dlq` and the offset is committed; the consumer never crashes on it and never parses a legacy shape.",
         "tags": [
           {
             "name": "process-path"
@@ -1033,10 +1533,16 @@
       "ProcessPathUpdated": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[1]",
       "ProcessPathDeactivated": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[2]",
       "CPTScheduleChanged": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[3]",
+      "ProcessFlowDefined": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[4]",
+      "ProcessFlowRevised": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[5]",
+      "ProcessFlowRetired": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[6]",
       "ProcessPathCreatedAnalytics": "$ref:$.channels.warehouse.process-path-management.analytics.publish.message.oneOf[0]",
       "ProcessPathUpdatedAnalytics": "$ref:$.channels.warehouse.process-path-management.analytics.publish.message.oneOf[1]",
       "ProcessPathDeactivatedAnalytics": "$ref:$.channels.warehouse.process-path-management.analytics.publish.message.oneOf[2]",
-      "CPTScheduleChangedAnalytics": "$ref:$.channels.warehouse.process-path-management.analytics.publish.message.oneOf[3]"
+      "CPTScheduleChangedAnalytics": "$ref:$.channels.warehouse.process-path-management.analytics.publish.message.oneOf[3]",
+      "ProcessFlowDefinedAnalytics": "$ref:$.channels.warehouse.process-path-management.analytics.publish.message.oneOf[4]",
+      "ProcessFlowRevisedAnalytics": "$ref:$.channels.warehouse.process-path-management.analytics.publish.message.oneOf[5]",
+      "ProcessFlowRetiredAnalytics": "$ref:$.channels.warehouse.process-path-management.analytics.publish.message.oneOf[6]"
     },
     "schemas": {
       "CloudEventEnvelope": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload.allOf[0]",
@@ -1044,15 +1550,23 @@
       "ProcessPathUpdatedCloudEvent": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[1].payload",
       "ProcessPathDeactivatedCloudEvent": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[2].payload",
       "CPTScheduleChangedCloudEvent": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[3].payload",
+      "ProcessFlowDefinedCloudEvent": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[4].payload",
+      "ProcessFlowRevisedCloudEvent": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[5].payload",
+      "ProcessFlowRetiredCloudEvent": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[6].payload",
       "ProcessPathCreatedAnalyticsCloudEvent": "$ref:$.channels.warehouse.process-path-management.analytics.publish.message.oneOf[0].payload",
       "ProcessPathUpdatedAnalyticsCloudEvent": "$ref:$.channels.warehouse.process-path-management.analytics.publish.message.oneOf[1].payload",
       "ProcessPathDeactivatedAnalyticsCloudEvent": "$ref:$.channels.warehouse.process-path-management.analytics.publish.message.oneOf[2].payload",
       "CPTScheduleChangedAnalyticsCloudEvent": "$ref:$.channels.warehouse.process-path-management.analytics.publish.message.oneOf[3].payload",
+      "ProcessFlowDefinedAnalyticsCloudEvent": "$ref:$.channels.warehouse.process-path-management.analytics.publish.message.oneOf[4].payload",
+      "ProcessFlowRevisedAnalyticsCloudEvent": "$ref:$.channels.warehouse.process-path-management.analytics.publish.message.oneOf[5].payload",
+      "ProcessFlowRetiredAnalyticsCloudEvent": "$ref:$.channels.warehouse.process-path-management.analytics.publish.message.oneOf[6].payload",
       "ProcessPathDeactivatedData": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[2].payload.allOf[1].properties.data",
       "ProcessPathData": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload.allOf[1].properties.data",
       "EligibilityData": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload.allOf[1].properties.data.properties.eligibility",
       "CPTScheduleData": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[3].payload.allOf[1].properties.data",
-      "CutoffData": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[3].payload.allOf[1].properties.data.properties.cutoffs.items"
+      "CutoffData": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[3].payload.allOf[1].properties.data.properties.cutoffs.items",
+      "ProcessFlowData": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[4].payload.allOf[1].properties.data",
+      "FlowStageData": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[4].payload.allOf[1].properties.data.properties.stages.items"
     }
   },
   "x-parser-spec-parsed": true,
