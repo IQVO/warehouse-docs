@@ -78,6 +78,12 @@ const sidebar: SidebarsConfig = {
         },
         {
           type: "doc",
+          id: "api-reference/rest/warehouse-planning/compare-capacity-plans",
+          label: "Lay 2 to 5 capacity plan scenarios of one site and window side by side",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
           id: "api-reference/rest/warehouse-planning/get-capacity-plan",
           label: "Get a CapacityPlan",
           className: "api-method get",
@@ -174,6 +180,56 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "api-reference/rest/warehouse-planning/get-capacity-plan-variance",
           label: "Planned versus observed throughput of a capacity plan (advisory)",
+          className: "api-method get",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "workload-forecasts",
+      link: {
+        type: "doc",
+        id: "api-reference/rest/warehouse-planning/workload-forecasts",
+      },
+      items: [
+        {
+          type: "doc",
+          id: "api-reference/rest/warehouse-planning/receive-workload-forecast",
+          label: "Receive the workload forecast of a process path at a site",
+          className: "api-method put",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/warehouse-planning/get-workload-forecast",
+          label: "Read the workload forecast of a process path at a site",
+          className: "api-method get",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "labour-plans",
+      link: {
+        type: "doc",
+        id: "api-reference/rest/warehouse-planning/labour-plans",
+      },
+      items: [
+        {
+          type: "doc",
+          id: "api-reference/rest/warehouse-planning/commit-labour-plan",
+          label: "Commit the labour plan of a process path for a shift at a site",
+          className: "api-method put",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/warehouse-planning/get-labour-plan",
+          label: "Read the labour plan of a process path for a shift at a site",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/warehouse-planning/list-labour-plans",
+          label: "List the labour plans of a shift at a site",
           className: "api-method get",
         },
       ],
