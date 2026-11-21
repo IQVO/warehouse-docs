@@ -52,35 +52,5 @@
   "class": "route-missing",
   "text": "GET /loki/api/v1/query_range",
   "reason": "External: an outbound call to Loki or the Anthropic Messages API, not a route of this service."
- },
- {
-  "file": "docs/contexts/wes-work-planning/domain-message-flow.md",
-  "class": "route-missing",
-  "text": "POST /paths/{pathId}/charge",
-  "reason": "Synced copy of wes-work-planning's DDD page (byte copy of its develop): it still describes the ADR-0049 410 tombstone; stage E (2026-11-21) removed the route. Fix upstream, re-sync, then drop this entry."
- },
- {
-  "file": "docs/contexts/wes-work-planning/eventstorming.md",
-  "class": "route-missing",
-  "text": "POST /paths/{pathId}/charge",
-  "reason": "Synced copy of wes-work-planning's DDD page (byte copy of its develop): it still describes the ADR-0049 410 tombstone; stage E (2026-11-21) removed the route. Fix upstream, re-sync, then drop this entry."
- },
- {
-  "file": "docs/contexts/wes-work-planning/sequence-diagrams.md",
-  "class": "route-missing",
-  "text": "POST /paths/{pathId}/charge",
-  "reason": "Synced copy of wes-work-planning's DDD page (byte copy of its develop): it still describes the ADR-0049 410 tombstone; stage E (2026-11-21) removed the route. Fix upstream, re-sync, then drop this entry."
- },
- {
-  "file": "docs/contexts/wes-work-planning/sequence-diagrams.md",
-  "class": "route-missing",
-  "text": "POST /paths/{pathId}/plan",
-  "reason": "Synced copy of wes-work-planning's DDD page (byte copy of its develop): it still describes the ADR-0049 410 tombstone; stage E (2026-11-21) removed the route. Fix upstream, re-sync, then drop this entry."
- },
- {
-  "file": "docs/contexts/wes-work-planning/use-cases.md",
-  "class": "route-missing",
-  "text": "POST /paths/{pathId}/charge",
-  "reason": "Synced copy of wes-work-planning's DDD page (byte copy of its develop): it still describes the ADR-0049 410 tombstone; stage E (2026-11-21) removed the route. Fix upstream, re-sync, then drop this entry."
  }
 ]

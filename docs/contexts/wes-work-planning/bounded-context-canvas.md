@@ -207,7 +207,7 @@ are retired, and the facility-layout travel-distance query is gone
 ([ADR-0049](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0049-charge-forecast-and-shift-plan-move-to-warehouse-planning.md)).
 The planner calls warehouse-planning's `PUT /workload-forecasts/{site_id}/{path_id}`
 and `PUT /labour-plans/{site_id}/{shift_id}/{path_id}` instead; the two old
-POSTs here answer `410`.
+POSTs here answered `410` for one release and were removed in stage E (a POST answers `404`).
 
 ## Ubiquitous Language
 
