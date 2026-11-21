@@ -104,6 +104,46 @@ const sidebar: SidebarsConfig = {
     },
     {
       type: "category",
+      label: "Totes",
+      link: {
+        type: "doc",
+        id: "api-reference/rest/inventory-storage/totes",
+      },
+      items: [
+        {
+          type: "doc",
+          id: "api-reference/rest/inventory-storage/register-tote",
+          label: "Register a tote by its license plate",
+          className: "api-method put",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/inventory-storage/get-tote",
+          label: "Read one tote and its contents",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/inventory-storage/fill-tote",
+          label: "Fill a tote with loose eaches at its current bin",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/inventory-storage/stow-tote",
+          label: "Stow a tote and all its contents into a bin",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/inventory-storage/list-bin-totes",
+          label: "List the totes stowed in a bin",
+          className: "api-method get",
+        },
+      ],
+    },
+    {
+      type: "category",
       label: "Reservations",
       link: {
         type: "doc",
