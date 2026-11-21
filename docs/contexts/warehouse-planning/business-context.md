@@ -91,8 +91,9 @@ publishes the ordered stages of a flow (`ProcessFlowDefined/Revised/Retired`, ea
 the full state with a `version`) and this context keeps a `process_flows` copy,
 applying a message only when its `version` is greater. An ACTIVE flow wins over a
 locally declared path of the same id — every path read says which it used
-(`source: flow|local`). `POST /process-paths` keeps working until stages 2-3
-(decided, not built) retire it.
+(`source: flow|local` while both existed). Stages 2-3 shipped: `POST /process-paths`
+answers `410 process-path-moved` and the local table is gone, so flows are the only
+source (`source: flow` on every read).
 
 ## Why capacity is composed, not stored
 

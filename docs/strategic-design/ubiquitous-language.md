@@ -204,12 +204,11 @@ exists. workforce-management supplies people, it does not state the requirement.
 ### "Process flow"
 
 A `ProcessFlow` (the topology of a path: which stages, in what order) is
-**built on `develop`** (process-path-management ADR 0042, PR #272; warehouse-planning
-ADR 0025 stage 1, PR #156; merged 2026-11-20). process-path-management owns it;
-warehouse-planning keeps an event-fed `process_flows` copy, and an ACTIVE flow wins
-over a locally declared `ProcessPath` of the same id (every path read says which it
-used: `source: flow|local`). The local declaration retires in stages 2-3, decided,
-not built.
+**built and deployed** (process-path-management ADR 0042, PR #272; warehouse-planning
+ADR 0025 complete: PRs #156, #160 and #162, released as v2.0.4 on 2026-11-20).
+process-path-management owns it; warehouse-planning keeps an event-fed `process_flows`
+copy as the ONLY path source — the local declaration retired (its route answers 410
+and migration `0019` dropped its table), so every path read says `source: flow`.
 
 ### "Release"
 
