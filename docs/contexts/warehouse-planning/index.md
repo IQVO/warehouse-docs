@@ -96,9 +96,9 @@ labour demand composed at read time from an operator-declared
 `process-path-management` publishes an ordered sequence of process-path stages
 (`ProcessFlowDefined/Revised/Retired`, full state with a `version`), this context
 keeps a version-guarded `process_flows` copy as the path capacity's steps, and
-`POST /process-paths` retires through a strangler in stages 2-3 (decided, not
-built). Until then both sources coexist and every path read carries
-`source: flow|local`.
+`POST /process-paths` retired through the strangler: stages 2-3 are built and
+deployed (v2.0.4) — the route answers `410 process-path-moved`, migration `0019`
+dropped the local table, and every path read carries `source: flow`.
 
 **Planned, not implemented:** observed capacity from `wes-work-planning`
 and demand from `network-fulfillment`, as drawn in ADR 0001's context map.
