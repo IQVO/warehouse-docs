@@ -14,9 +14,8 @@ slug: /contexts/wes-work-planning
 a time, earliest-CPT-first — and performs **flow balancing** from live buffer
 telemetry so that every parcel makes its truck without the floor ever being
 starved or flooded. The shift's forecast and labour plan are decided in
-[`warehouse-planning`](/contexts/warehouse-planning), not here: `POST
-/paths/{pathId}/charge` and `POST /paths/{pathId}/plan` answer `410` since
-ADR-0049.
+[`warehouse-planning`](/contexts/warehouse-planning), not here: the former `POST /paths/{pathId}/charge` and `POST /paths/{pathId}/plan` were removed
+(ADR-0049; `410` for one release, gone since 2026-11-21).
 
 It sits downstream of seven upstream event suppliers (`inventory-storage`,
 `workforce-management`, `order-management`, [`network-inventory-planning`](/contexts/network-inventory-planning)'s

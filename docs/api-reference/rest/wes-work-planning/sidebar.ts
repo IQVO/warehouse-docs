@@ -8,38 +8,6 @@ const sidebar: SidebarsConfig = {
     },
     {
       type: "category",
-      label: "Charge Forecast",
-      link: {
-        type: "doc",
-        id: "api-reference/rest/wes-work-planning/charge-forecast",
-      },
-      items: [
-        {
-          type: "doc",
-          id: "api-reference/rest/wes-work-planning/receive-charge-forecast",
-          label: "Moved — the charge forecast is warehouse-planning's (always 410)",
-          className: "menu__list-item--deprecated api-method post",
-        },
-      ],
-    },
-    {
-      type: "category",
-      label: "Shift Plan",
-      link: {
-        type: "doc",
-        id: "api-reference/rest/wes-work-planning/shift-plan",
-      },
-      items: [
-        {
-          type: "doc",
-          id: "api-reference/rest/wes-work-planning/commit-shift-plan",
-          label: "Moved — the shift plan is warehouse-planning's (always 410)",
-          className: "menu__list-item--deprecated api-method post",
-        },
-      ],
-    },
-    {
-      type: "category",
       label: "Work Units",
       link: {
         type: "doc",
