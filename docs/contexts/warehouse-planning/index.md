@@ -81,8 +81,8 @@ requires and proposes from it (its ADR 0043).
 `PUT`/`GET /labour-plans/{site_id}/{shift_id}/{path_id}`, `GET /labour-plans`
 and `GET /capacity-plans/comparisons`. `POST /capacity-plans` takes an
 optional `demand_source` (`request`, `orders` or `forecast`) and an optional
-`scenario` label. `wes-work-planning`'s `POST /paths/{pathId}/charge` and
-`/plan` answer `410` and name these routes.
+`scenario` label. `wes-work-planning`'s `POST /paths/{pathId}/charge` and `/plan` are removed
+(ADR-0049 stage E, 2026-11-21) after one release of `410` naming these routes.
 
 **Built by [ADR 0017](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0017-inbound-labour-demand-and-observed-capacity-feedback.md):**
 observed-capacity feedback from `fulfillment-execution`'s `TaskCompleted`,

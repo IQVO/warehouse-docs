@@ -235,9 +235,10 @@ decision, not an omission.
   ([ADR-0012](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0012-process-path-catalogue-validation.md)),
   and this context conforms to it rather than modelling it.
 - **It does not forecast or plan.** The workload forecast, the labour plan
-  and drift against it belong to `warehouse-planning`. `POST
-  /paths/{pathId}/charge` and `POST /paths/{pathId}/plan` answer `410` and
-  name the replacement routes. What this context still holds is
+  and drift against it belong to `warehouse-planning`. The former `POST /paths/{pathId}/charge` and `POST /paths/{pathId}/plan` were removed
+  (ADR-0049 stage E, 2026-11-21) after one release of `410` naming
+  warehouse-planning's `PUT /workload-forecasts/{site_id}/{path_id}` and
+  `PUT /labour-plans/{site_id}/{shift_id}/{path_id}`. What this context still holds is
   `LaborPlanObserved`, a pure projection of what `workforce-management`
   last committed, which `RebalanceDecision` returns as context.
 

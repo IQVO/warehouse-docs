@@ -158,8 +158,8 @@ it to a different subject:
   (one per site, shift and process path: the heads a path needs, at a planned
   rate for a number of hours, invariant `planned_heads ≤ installed_stations`) is
   committed through `PUT /labour-plans/{site_id}/{shift_id}/{path_id}`. It was
-  wes-work-planning's `ShiftPlan` aggregate (`POST /paths/{pathId}/plan`, now
-  answering 410; wes-work-planning ADR 0049). wes-work-planning's own `PathPlan`
+  wes-work-planning's `ShiftPlan` aggregate; its `POST /paths/{pathId}/plan` is removed
+  (410 for one release, then gone; wes-work-planning ADR 0049). wes-work-planning's own `PathPlan`
   term is retired with it.
 - workforce-management's `ShiftPlanCommitted` reaches warehouse-planning, which
   records its `planned_heads` as the **committed heads** and compares them with
