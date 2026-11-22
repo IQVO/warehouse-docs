@@ -1,7 +1,7 @@
 # warehouse-docs: thin wrappers over the npm scripts and the offline gates that CI `build-check`
 # (.github/workflows/docs.yml) runs. The live develop-drift check needs GITHUB_TOKEN and the network,
 # so it is not part of check-fast; run it with `make drift-gate`.
-.PHONY: install typecheck gen-check drift-test specs-sync drift-gate mermaid build check check-all
+.PHONY: install typecheck gen-check drift-test specs-sync drift-gate mermaid build check lint check-all
 
 install: ## npm ci at the root, then the isolated AsyncAPI toolchain (a root npm ci does not recurse)
 	npm ci
@@ -39,7 +39,10 @@ mermaid: ## parse + render every Mermaid diagram in a real browser
 build: ## regenerate the REST + AsyncAPI references, then docusaurus build
 	npm run build
 
-check: gen-check drift-test typecheck
+lint: ## prettier --check over the TypeScript surface (needs `make install`)
+	npm run lint
+
+check: lint gen-check drift-test typecheck
 
 check-all: check drift-gate build
 

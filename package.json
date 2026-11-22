@@ -28,7 +28,8 @@
     "gen-async-docs:all": "node scripts/gen-async-docs.mjs",
     "gen-alert-catalogue": "node scripts/gen-alert-catalogue.mjs",
     "validate:mermaid": "node scripts/validate-mermaid.cjs $(grep -rl '```mermaid' docs network/docs storefront/docs yard/docs --include='*.md' --include='*.mdx')",
-    "postinstall": "npm --prefix tools/asyncapi-gen install --no-audit --no-fund"
+    "postinstall": "npm --prefix tools/asyncapi-gen install --no-audit --no-fund",
+    "lint": "prettier --check ."
   },
   "dependencies": {
     "@docusaurus/core": "3.10.2",
@@ -48,6 +49,7 @@
     "@docusaurus/tsconfig": "3.10.2",
     "@docusaurus/types": "3.10.2",
     "@types/react": "^19.3.0",
+    "prettier": "^3.10.1",
     "typescript": "~7.0.2"
   },
   "browserslist": {
