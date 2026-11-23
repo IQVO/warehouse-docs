@@ -1,0 +1,7 @@
+# Lint only the TypeScript surface of this repo (the docusaurus config, the
+# sidebars, src/). Everything else — content trees, generated pages, tooling —
+# stays out of the formatting gate.
+*
+!*.ts
+!*.tsx
+!src/**
