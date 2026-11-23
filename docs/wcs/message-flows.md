@@ -2,17 +2,17 @@
 id: message-flows
 title: WCS message flows
 sidebar_label: Message flows
-description: The four WCS flows end to end - goods-to-person picking, putaway into the AS/RS, replenishment and outbound transport - with the failure path and the capacity loop, as commands, events and queries between contexts. Designed, not built.
+description: The four WCS flows end to end - goods-to-person picking, putaway into the AS/RS, replenishment and outbound transport - with the failure path and the capacity loop, as commands, events and queries between contexts. The WCS contexts are built (plans WCS-02 through WCS-06).
 ---
 
-{/* drift-allow-file: the WCS tier is designed, not built; every route on this page is a design proposal with no OpenAPI on develop yet */}
+{/* drift-allow-file: strategic design page, not a spec mirror - the built contexts' authoritative contracts are each repository's apis/openapi.yaml and apis/asyncapi.yaml on develop */}
 
 # WCS message flows
 
 This page is ddd-crew's
 [Domain Message Flow Modelling](https://github.com/ddd-crew/domain-message-flow-modelling)
 for the four flows in scope. Steps marked *(existing)* run in the fleet today;
-everything else is designed, not built.
+the WCS contexts they cross are built as well (plans WCS-02 through WCS-06).
 
 ## Flow 1: goods-to-person picking
 

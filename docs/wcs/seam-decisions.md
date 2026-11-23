@@ -5,7 +5,7 @@ sidebar_label: Seam decisions
 description: The five decisions at the seams between the WCS and the fleet - container ownership, the AS/RS as one logical location, the WES-WCS transport contract, the transport purposes and the CloudEvents segment - with the options considered and the rationale.
 ---
 
-{/* drift-allow-file: the WCS tier is designed, not built; every route on this page is a design proposal with no OpenAPI on develop yet */}
+{/* drift-allow-file: strategic design page, not a spec mirror - the built contexts' authoritative contracts are each repository's apis/openapi.yaml and apis/asyncapi.yaml on develop */}
 
 # WCS seam decisions
 

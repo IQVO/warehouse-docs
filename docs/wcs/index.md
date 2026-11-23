@@ -2,7 +2,7 @@
 id: index
 title: Warehouse Control System (WCS)
 sidebar_label: Overview
-description: The strategic Domain-Driven Design of the warehouse control system tier for the AMR fleet and the AS/RS - subdomains, three bounded contexts, context map, seam decisions and message flows. asrs-control is built; amr-fleet-control and material-flow-control are designed, not built.
+description: The strategic Domain-Driven Design of the warehouse control system tier for the AMR fleet and the AS/RS - subdomains, three bounded contexts, context map, seam decisions and message flows. All three contexts are built on develop (plans WCS-02 through WCS-04; the shared floor map's PK1/FWD1/CLR1 handoff points completed by plan WCS-06).
 ---
 
 # Warehouse Control System (WCS)

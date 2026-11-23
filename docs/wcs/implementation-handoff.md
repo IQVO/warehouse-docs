@@ -20,8 +20,8 @@ and synced here once the repositories exist.
 | --- | --- | --- |
 | 1 | `equipment-emulator` and the MQTT broker | Nothing else can be tested without robots and an AS/RS to talk to. |
 | 2 | `asrs-control` | DONE - built by plan WCS-02, merged to develop 2026-11-20 (IQVO/asrs-control PR #2); it proves the subsystem-controller interface. |
-| 3 | `amr-fleet-control` | VDA 5050 master control against the emulated robots, with the map from `facility-layout`. |
-| 4 | `material-flow-control` | Needs both subsystems to plan multi-leg transports. |
+| 3 | `amr-fleet-control` | DONE - built by plan WCS-03, merged to develop 2026-11-22 (IQVO/amr-fleet-control PR #2); plan WCS-06 extended its example floor map with the pick-face, forward and clarification handoff points PK1/FWD1/CLR1 (map `2026-11-22.1`, released v0.1.1, legs verified live 2026-11-23). |
+| 4 | `material-flow-control` | DONE - built by plan WCS-04, merged to develop 2026-11-22 (IQVO/material-flow-control PR #2, released v0.1.0); its legs to the PK1/FWD1/CLR1 handoff points were proven end to end by plan WCS-06 (PR #12, live 2026-11-23). |
 | 5 | Changes to existing contexts | `inventory-storage`, then `facility-layout`, `fulfillment-execution`, `wes-work-planning`, `exception-management` (see [ecosystem impact](/wcs/ecosystem-impact)). |
 | 6 | Flows end to end | Goods-to-person, then putaway, replenishment and outbound. |
 

@@ -2,7 +2,7 @@
 id: context-map
 title: WCS context map
 sidebar_label: Context map
-description: The three WCS bounded contexts and every relationship to the existing fleet and to the emulated equipment, with the context-mapping pattern, the channel and what crosses each one. asrs-control is built; the other two contexts are designed, not built.
+description: The three WCS bounded contexts and every relationship to the existing fleet and to the emulated equipment, with the context-mapping pattern, the channel and what crosses each one. All three contexts are built on develop (the shared floor map's PK1/FWD1/CLR1 handoff points completed by plan WCS-06).
 ---
 
 {/* drift-allow-file: the WCS tier mixes built (asrs-control) and proposed contexts; routes here are design proposals except where the page says a context is built */}

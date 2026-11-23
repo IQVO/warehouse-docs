@@ -2,17 +2,23 @@
 id: material-flow-control
 title: material-flow-control
 sidebar_label: material-flow-control
-description: The WES-facing WCS bounded context (Supporting) - transport orders, container physical tracking, station sequencing, clarification and the subsystem capacity view. Designed, not built.
+description: The WES-facing WCS bounded context (Supporting) - transport orders, container physical tracking, station sequencing, clarification and the subsystem capacity view. Built on develop (IQVO/material-flow-control).
 ---
 
-{/* drift-allow-file: the WCS tier is designed, not built; every route on this page is a design proposal with no OpenAPI on develop yet */}
+{/* drift-allow-file: strategic design page, not a spec mirror - the built context's authoritative contracts are IQVO/material-flow-control apis/openapi.yaml and apis/asyncapi.yaml on develop */}
 
 # material-flow-control
 
-:::note[Designed, not built]
+:::note[Built - IQVO/material-flow-control on develop]
 Classification **Supporting**. CloudEvents segment `wes`. Topics
-`warehouse.material-flow-control.events` and `.analytics`. No repository exists
-yet.
+`warehouse.material-flow-control.events` and `.analytics`. Repository:
+[IQVO/material-flow-control](https://github.com/IQVO/material-flow-control),
+merged 2026-11-22 (plan WCS-04, PR #2), released v0.1.0: transport orders
+through the AS/RS and AMR subsystems, container tracking, station sequencing
+and clarification. Since plan WCS-06 (PR #12, 2026-11-23) its transport legs
+reach the pick-face, forward and clarification handoff points
+`PK1`/`FWD1`/`CLR1` on amr-fleet-control's `2026-11-22.1` map, verified live
+through Kong.
 :::
 
 ## Purpose
