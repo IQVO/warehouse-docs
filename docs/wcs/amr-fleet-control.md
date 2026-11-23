@@ -2,18 +2,25 @@
 id: amr-fleet-control
 title: amr-fleet-control
 sidebar_label: amr-fleet-control
-description: The VDA 5050 master control bounded context for the AMR fleet (Generic) - mission assignment, path and traffic control, deadlocks, charging, robot registry and the node-edge map. Designed, not built.
+description: The VDA 5050 master control bounded context for the AMR fleet (Generic) - mission assignment, path and traffic control, deadlocks, charging, robot registry and the node-edge map. Built on develop (IQVO/amr-fleet-control).
 ---
 
-{/* drift-allow-file: the WCS tier is designed, not built; every route on this page is a design proposal with no OpenAPI on develop yet */}
+{/* drift-allow-file: strategic design page, not a spec mirror - the built context's authoritative contracts are IQVO/amr-fleet-control apis/openapi.yaml and apis/asyncapi.yaml on develop */}
 
 # amr-fleet-control
 
-:::note[Designed, not built]
+:::note[Built - IQVO/amr-fleet-control on develop]
 Classification **Generic**: VDA 5050 master control, built to the standard so a
 vendor fleet controller could replace it. CloudEvents segment `wes`. Topics
 `warehouse.amr-fleet-control.events` and `.analytics`. Speaks VDA 5050 v3 over
-MQTT to the robots. No repository exists yet.
+MQTT to the robots. Repository: [IQVO/amr-fleet-control](https://github.com/IQVO/amr-fleet-control),
+merged 2026-11-22 (plan WCS-03, PR #2), released v0.1.1 2026-11-23: OpenAPI and
+AsyncAPI contracts, the versioned node-and-edge example floor map
+(`config/map.example.yaml`, pinned to the equipment emulator's world), which
+carries the pick-face, forward and clarification handoff points
+`PK1`/`FWD1`/`CLR1` since map version `2026-11-22.1` (plan WCS-06). The
+`facility-layout` ACL stays a design proposal; the built map is the
+hand-maintained example floor.
 :::
 
 ## Purpose
